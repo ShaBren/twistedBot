@@ -33,7 +33,7 @@ class twistedBot(irc.IRCClient):
 
     def privmsg(self, user, channel, msg):
         #print ("%s %s %s")%(user, channel, msg)
-        if "loudbot" in user:
+        if user.endswith( "bot" ):
             return
     	if not user:
     		return
