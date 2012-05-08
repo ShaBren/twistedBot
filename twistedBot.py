@@ -9,7 +9,7 @@ import sys
 import os
 import random
 import re
-import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 import textwrap
 import pycurl
 import json
@@ -40,15 +40,18 @@ class twistedBot( irc.IRCClient ):
 		msgFrom = user.split( '!', 1 )[0]
 		replyTo = channel
 		replyMsg = ""
+		reply = ""
 		
 		if isPrivateMsg:
-			msg = msg.split( " " )[1:].join( " " )
+			msg = " ".join( msg.split( " " )[1:] )
 			replyTo = msgFrom
 		else:
 			replyMsg = "%s: " % ( msgFrom, )
 
 		msg = msg.strip()
-		reply = self.parseMsg( msg )
+
+		if isPrivateMsg or msg.startswith( self.nickname ):
+			reply = self.parseMsg( " ".join( msg.split( " " )[1:] ) )
 
 		if reply == "" and ( msg.startswith( self.nickname ) or isPrivateMsg or random.random() <= self.factory.chattiness ): 
 			reply = self.getsentence( msg )
@@ -66,7 +69,7 @@ class twistedBot( irc.IRCClient ):
 
 			print self.lastMsg
 			status = self.factory.api.PostUpdate( self.lastMsg )
-			return base + str( status.id )
+			return self.factory.base + str( status.id )
 
 		elif msg.startswith( "kittify" ):
 			return self.kittify()
@@ -74,10 +77,10 @@ class twistedBot( irc.IRCClient ):
 		elif msg.startswith( "kitlast" ):
 			url = self.kittify()
 			status = self.factory.api.PostUpdate( url )
-			return self.base + str( status.id ) + " " + url
+			return self.factory.base + str( status.id ) + " " + url
 
 		elif msg.startswith( "source" ):
-			return self.config.get( "General", "source_url" )
+			return self.factory.config.get( "General", "source_url" )
 
 		elif msg.startswith( "help" ):
 			return "Commands: twitlast - tweets the last message; source - link to bot's source; kittify - kittenify the last message; kitlast - kittenify and post image to twitter; help - this message"
@@ -97,14 +100,15 @@ class twistedBot( irc.IRCClient ):
 		width = box[2]
 		height = box[3]
 		fsize = 70
+		font = ImageFont.truetype( "ArialBlack.ttf", fsize )
+
+		while font.getsize( self.lastMsg )[0] > ( ( width * 2 ) - 80 ):
+			fsize -= 2
+			font = ImageFont.truetype( "ArialBlack.ttf", fsize )
+
 		lines = textwrap.wrap( self.lastMsg, int( width / fsize * 1.65 ) )
 
-		while len(lines) > 2:
-			fsize -= 2
-			lines = textwrap.wrap( self.lastMsg, int( width / fsize * 1.65 ) )
-
 		draw = ImageDraw.Draw( im )
-		font = ImageFont.truetype( "Arial.ttf", fsize )
 		draw.text( ( 10, 10 ), lines[0], font=font, fill="white" )
 
 		if len( lines ) > 1:
@@ -117,7 +121,7 @@ class twistedBot( irc.IRCClient ):
 		c = pycurl.Curl()
 
 		values = [
-			( "key", self.imgur_token ),
+			( "key", self.factory.imgur_token ),
 			( "image", ( c.FORM_FILE, "tmp.jpg" ) )
 		]
 		
