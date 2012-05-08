@@ -112,8 +112,7 @@ class twistedBot(irc.IRCClient):
 			lines = textwrap.wrap(self.lastMsg, int(width/fsize*1.65))
 
 		draw = ImageDraw.Draw(im)
-		font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu-font-family/Ubuntu-B.ttf", fsize)
-		#font = ImageFont.truetype("Ubuntu.ttf", fsize)
+		font = ImageFont.truetype("Arial.ttf", fsize)
 		draw.text((10, 10), lines[0], font=font, fill="white")
 		if len(lines) > 1:
 			draw.text((10, height-10-fsize), lines[-1], font=font)
@@ -147,14 +146,14 @@ class twistedBot(irc.IRCClient):
 class twistedBotFactory(protocol.ClientFactory):
 	protocol = twistedBot
 
-	def __init__(self, channel, nickname="testthathree", chain_length=3, chattiness=1.0, max_words=10000):
+	def __init__( self ):
 		config = ConfigParser.ConfigParser()
-		config.read("twitter.config")
-		self.channel = channel
-		self.nickname = nickname
-		self.chain_length = chain_length
-		self.chattiness = chattiness
-		self.max_words = max_words
+		config.read( "bot.config" )
+		self.channel = config.get( "IRC", "channel" )
+		self.nickname = config.get( "IRC", "nickname" )
+		self.chain_length = config.getint( "Markov", "chain_length" )
+		self.chattiness = config.getfloat( "Markov", "chattiness" )
+		self.max_words = config.getint( "Markov", "max_words" )
 		self.api = twitter.Api(config.get('OAuth','consumer_key'), config.get('OAuth','consumer_secret'), config.get('OAuth','access_token_key'), config.get('OAuth', 'access_token_secret'))
 	
 	def clientConnectionLost(self, connector, reason):
@@ -165,17 +164,21 @@ class twistedBotFactory(protocol.ClientFactory):
 		print "Could not connect: "+str(reason)
 
 if __name__ == "__main__":
-	chan = ""
-	chain_length = 2
-	try:
-	   chan = sys.argv[1]
-	except IndexError:
-		print "You need a channel name"
-	if os.path.exists('training_text.txt'):
-		f = open('training_text.txt', 'r')
+	config = ConfigParser.ConfigParser()
+	config.read( "bot.config" )
+
+	server = config.get( "IRC", "server" )
+	port = config.getint( "IRC", "port" )
+	chain_length = config.getint( "Markov", "chain_length" )
+		
+	if os.path.exists( 'training_text.txt' ):
+		f = open( 'training_text.txt', 'r' )
+
 		for line in f:
-			brain.add_to_brain(line.upper(), chain_length)
+			brain.add_to_brain( line.upper(), chain_length )
+
 		print "brain loaded"
 		f.close()
-	reactor.connectTCP("irc.freenode.net", 6667, twistedBotFactory("#"+chan, 'lessthanthree', 2, chattiness=0.05))
+
+	reactor.connectTCP( server, port, twistedBotFactory() )
 	reactor.run()
