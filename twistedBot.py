@@ -16,6 +16,8 @@ import json
 import cStringIO
 from twisted.internet import reactor
 
+blacklist = [ 'lessthanthree', 'Bit', 'Bit1' ]
+
 class twistedBot( irc.IRCClient ):
 	def __init__( self ):
 		lastMsg = ""
@@ -34,6 +36,9 @@ class twistedBot( irc.IRCClient ):
 
 	def privmsg( self, user, channel, msg ):
 		if not user or user.endswith( "bot" ):
+			return
+
+		if user in blacklist:
 			return
 		
 		isPrivateMsg = channel == self.nickname
@@ -102,7 +107,7 @@ class twistedBot( irc.IRCClient ):
 		fsize = 70
 		font = ImageFont.truetype( "ArialBlack.ttf", fsize )
 
-		while font.getsize( self.lastMsg )[0] > ( ( width * 2 ) - 80 ):
+		while font.getsize( self.lastMsg )[0] > ( ( width * 2 ) - 100 ):
 			fsize -= 2
 			font = ImageFont.truetype( "ArialBlack.ttf", fsize )
 
