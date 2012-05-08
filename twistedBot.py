@@ -56,17 +56,17 @@ class twistedBot( irc.IRCClient ):
 		msg = msg.strip()
 
 		if isPrivateMsg or msg.startswith( self.nickname ):
-			reply = self.parseMsg( " ".join( msg.split( " " )[1:] ) )
+			reply = self.parseMsg( " ".join( msg.split( " " )[1:] ), channel, msgFrom )
 
 		if reply == "" and ( msg.startswith( self.nickname ) or isPrivateMsg or random.random() <= self.factory.chattiness ): 
 			reply = self.getsentence( msg )
+			self.lastMsg = reply
 
 		if reply != "":
 			replyMsg += reply
-			self.lastMsg = reply
 			self.msg( replyTo, replyMsg )
 
-	def parseMsg( self, msg ): 
+	def parseMsg( self, msg, channel, user ): 
 
 		if msg.startswith( "twitlast" ):
 			if not hasattr(self, 'lastMsg') or self.lastMsg != "":
@@ -89,6 +89,20 @@ class twistedBot( irc.IRCClient ):
 
 		elif msg.startswith( "help" ):
 			return "Commands: twitlast - tweets the last message; source - link to bot's source; kittify - kittenify the last message; kitlast - kittenify and post image to twitter; help - this message"
+
+		elif msg.startswith( "die" ):
+ 			if user == self.factory.owner:
+				self.quit( "Yes master" )
+			else:
+				self.me( channel, "fires first and watches %s writhing on the ground." % ( user, ) )
+
+		elif msg.startswith( "join" ):
+			if user == self.factory.owner:
+				channels = msg.split( " " )[1:]
+				for chan in channels:
+					self.join( chan )
+			else:
+				self.me( channel, "kicks %s in the shin" % ( user, ) )
 
 		else:
 			return ""
@@ -158,6 +172,9 @@ class twistedBotFactory( protocol.ClientFactory ):
 		self.chain_length = config.getint( "Markov", "chain_length" )
 		self.chattiness = config.getfloat( "Markov", "chattiness" )
 		self.max_words = config.getint( "Markov", "max_words" )
+
+		self.source_url = config.get( "General", "source_url" )
+		self.owner = config.get( "General", "owner" )
 
 		self.base = config.get( "Twitter", "base_url" )
 		self.api = twitter.Api( 
