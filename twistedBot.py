@@ -65,7 +65,7 @@ class twistedBot( irc.IRCClient ):
 			reply = self.getsentence( msg )
 			self.lastMsg = reply
 
-		if reply != "":
+		if reply != None and len( reply ) > 0:
 			replyMsg += reply
 			self.msg( replyTo, replyMsg )
 
@@ -220,6 +220,7 @@ class twistedBotFactory( protocol.ClientFactory ):
 			connector.connect()
 		else:
 			print "Client exiting..."
+			reactor.stop()
 
 	def clientConnectionFailed(self, connector, reason):
 		print "Could not connect: " + str( reason )
