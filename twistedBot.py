@@ -16,11 +16,13 @@ import json
 import cStringIO
 from twisted.internet import reactor
 
-blacklist = [ 'lessthanthree', 'Bit', 'Bit1' ]
 
 class twistedBot( irc.IRCClient ):
+	blacklist = [ 'lessthanthree', 'Bit', 'Bit1' ]
+
 	def __init__( self ):
 		lastMsg = ""
+		self.loadBlacklist()
 
 	def _get_nickname( self ):
 		return self.factory.nickname
@@ -35,14 +37,15 @@ class twistedBot( irc.IRCClient ):
 		print "Joined " + channel
 
 	def privmsg( self, user, channel, msg ):
-		if not user or user.endswith( "bot" ):
+		if not user:
 			return
 
-		if user in blacklist:
-			return
-		
-		isPrivateMsg = channel == self.nickname
 		msgFrom = user.split( '!', 1 )[0]
+
+	 	if msgFrom.endswith( "bot" ) or msgFrom in self.blacklist:
+			return
+
+		isPrivateMsg = channel == self.nickname
 		replyTo = channel
 		replyMsg = ""
 		reply = ""
@@ -92,7 +95,7 @@ class twistedBot( irc.IRCClient ):
 
 		elif msg.startswith( "die" ):
  			if user == self.factory.owner:
-				self.quit( "Yes master" )
+				self.doQuit()
 			else:
 				self.me( channel, "fires first and watches %s writhing on the ground." % ( user, ) )
 
@@ -103,9 +106,30 @@ class twistedBot( irc.IRCClient ):
 					self.join( chan )
 			else:
 				self.me( channel, "kicks %s in the shin" % ( user, ) )
-
+		
+		elif msg.startswith( "blacklist" ):
+			if user == self.factory.owner:
+				nicks = msg.split( " " )[1:]
+				for nick in nicks:
+					self.blacklist.append( nick )
+		
 		else:
 			return ""
+
+	def doQuit( self ):
+		self.factory.isQuitting = true
+		self.quit( "Yes master" )
+		self.saveBlacklist()
+
+	def saveBlacklist( self ):
+		blacklistFile = open( "blacklist.json", "w" )
+		json.dump( self.blacklist, blacklistFile )
+		blacklistFile.close()
+
+	def loadBlacklist( self ):
+		blacklistFile = open( "blacklist.json", "r" )
+		self.blacklist = json.load( blacklistFile )
+		blacklistFile.close()
 
 	def kittify( self ):
 		if not hasattr( self, 'lastMsg' ) or self.lastMsg == "":
@@ -164,6 +188,7 @@ class twistedBot( irc.IRCClient ):
 
 class twistedBotFactory( protocol.ClientFactory ):
 	protocol = twistedBot
+	isQuitting = false
 
 	def __init__( self, config ):
 		self.channel = config.get( "IRC", "channel" )
@@ -189,8 +214,12 @@ class twistedBotFactory( protocol.ClientFactory ):
 		self.config = config
 	
 	def clientConnectionLost( self, connector, reason ):
-		print "Lost connection " + str( reason ) + ", reconnection"
-		connector.connect()
+		if not isQuitting:
+			print "Lost connection: " + str( reason ) 
+			print "Reconnecting...
+			connector.connect()
+		else:
+			print "Client exiting..."
 
 	def clientConnectionFailed(self, connector, reason):
 		print "Could not connect: " + str( reason )
