@@ -112,6 +112,20 @@ class twistedBot( irc.IRCClient ):
 				nicks = msg.split( " " )[1:]
 				for nick in nicks:
 					self.blacklist.append( nick )
+
+				self.msg( channel, "Added %s to blacklist" % ( ", ".join( nicks ), ) )
+			else:
+				self.me( channel, "kicks %s in the shin" % ( user, ) )
+
+		elif msg.startswith( "whitelist" ):
+			if user == self.factory.owner:
+				nicks = msg.split( " " )[1:]
+				for nick in nicks:
+					self.blacklist.remove( nick )
+
+				self.msg( channel, "Removed %s from blacklist" % ( ", ".join( nicks ), ) )
+			else:
+				self.me( channel, "kicks %s in the shin" % ( user, ) )
 		
 		else:
 			return ""
