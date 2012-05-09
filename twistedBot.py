@@ -4,6 +4,7 @@ from twisted.internet import protocol
 import brain
 
 import ConfigParser
+import json
 import twitter
 import sys
 import os
@@ -18,7 +19,6 @@ from twisted.internet import reactor
 
 
 class twistedBot( irc.IRCClient ):
-	blacklist = [ 'lessthanthree', 'Bit', 'Bit1' ]
 
 	def __init__( self ):
 		lastMsg = ""
@@ -117,7 +117,7 @@ class twistedBot( irc.IRCClient ):
 			return ""
 
 	def doQuit( self ):
-		self.factory.isQuitting = true
+		self.factory.isQuitting = True
 		self.quit( "Yes master" )
 		self.saveBlacklist()
 
@@ -188,7 +188,7 @@ class twistedBot( irc.IRCClient ):
 
 class twistedBotFactory( protocol.ClientFactory ):
 	protocol = twistedBot
-	isQuitting = false
+	isQuitting = False
 
 	def __init__( self, config ):
 		self.channel = config.get( "IRC", "channel" )
@@ -214,9 +214,9 @@ class twistedBotFactory( protocol.ClientFactory ):
 		self.config = config
 	
 	def clientConnectionLost( self, connector, reason ):
-		if not isQuitting:
+		if not self.isQuitting:
 			print "Lost connection: " + str( reason ) 
-			print "Reconnecting...
+			print "Reconnecting..."
 			connector.connect()
 		else:
 			print "Client exiting..."
