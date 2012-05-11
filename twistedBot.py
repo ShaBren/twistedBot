@@ -1,21 +1,20 @@
 from twisted.words.protocols import irc
-from twisted.internet import protocol
+from twisted.internet import protocol, reactor
+
+from PIL import Image, ImageDraw, ImageFont
 
 import brain
 
 import ConfigParser
-import json
 import twitter
 import sys
 import os
 import random
 import re
-from PIL import Image, ImageDraw, ImageFont
 import textwrap
 import pycurl
 import json
 import cStringIO
-from twisted.internet import reactor
 
 
 class twistedBot( irc.IRCClient ):
@@ -146,10 +145,8 @@ class twistedBot( irc.IRCClient ):
 		blacklistFile.close()
 
 	def kittify( self ):
-		if not hasattr( self, 'lastMsg' ) or self.lastMsg == "":
+		if self.lastMsg == "":
 			return ""
-
-		print self.lastMsg
 
 		kitten = "kitten%d.jpg" % random.choice( range( 1, 10 ) )
 		im = Image.open( "kittens/" + kitten )
