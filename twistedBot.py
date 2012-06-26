@@ -1,22 +1,13 @@
 from twisted.words.protocols import irc
 from twisted.internet import protocol
-
-import brain
+from twisted.internet import reactor
 
 import ConfigParser
 import json
-import twitter
 import sys
 import os
-import random
-import re
-from PIL import Image, ImageDraw, ImageFont
-import textwrap
-import pycurl
-import json
-import cStringIO
-from twisted.internet import reactor
-
+import sqlite3
+import time
 
 class twistedBot( irc.IRCClient ):
 
@@ -33,71 +24,58 @@ class twistedBot( irc.IRCClient ):
 		self.join( self.factory.channel )
 		print "Signed on as " + self.nickname
 
+		self.conn = sqlite3.connect( self.factory.config.get( "General", "database_path" ) )
+		self.cursor = self.conn.cursor()
+
 	def joined(self, channel):
 		print "Joined " + channel
 
-	def privmsg( self, user, channel, msg ):
+	def action( self, user, channel, msg ):
 		if not user:
 			return
 
 		msgFrom = user.split( '!', 1 )[0]
 
-	 	if msgFrom.endswith( "bot" ) or msgFrom in self.blacklist:
+		self.logMessage( msgFrom, channel, msg, 'ACTION' )
+
+	def privmsg( self, user, channel, msg ):
+		if not user:
 			return
 
-		isPrivateMsg = channel == self.nickname
-		replyTo = channel
-		replyMsg = ""
 		reply = ""
-		
-		if isPrivateMsg:
-			msg = " ".join( msg.split( " " )[1:] )
-			replyTo = msgFrom
-		else:
-			replyMsg = "%s: " % ( msgFrom, )
 
-		msg = msg.strip()
+		msgFrom = user.split( '!', 1 )[0]
 
-		if isPrivateMsg or msg.startswith( self.nickname ):
+	 	if msgFrom in self.blacklist:
+			return
+
+		self.logMessage( msgFrom, channel, msg, 'PRIVMSG' )
+
+		if msg.startswith( self.nickname ):
 			reply = self.parseMsg( " ".join( msg.split( " " )[1:] ), channel, msgFrom )
 
-		if reply == "" and ( msg.startswith( self.nickname ) or isPrivateMsg or random.random() <= self.factory.chattiness ): 
-			reply = self.getsentence( msg )
-			self.lastMsg = reply
-
 		if reply != None and len( reply ) > 0:
-			replyMsg += reply
-			self.msg( replyTo, replyMsg )
+			replyMsg = "%s: %s" % ( msgFrom, reply )
+			self.msg( channel, replyMsg )
+			self.logMessage( nickname, channel, replyMsg )
+
+	def logMessage( self, user, channel, msg, type ):
+		self.cursor.execute( u"INSERT INTO log VALUES (?,?,?,?,?)", ( channel.decode('utf-8'), user.decode('utf-8'), msg.decode('utf-8'), int( time.time() ), type.decode('utf-8') ) )
+		self.conn.commit()
 
 	def parseMsg( self, msg, channel, user ): 
 
-		if msg.startswith( "twitlast" ):
-			if not hasattr(self, 'lastMsg') or self.lastMsg != "":
-				return ""
-
-			print self.lastMsg
-			status = self.factory.api.PostUpdate( self.lastMsg )
-			return self.factory.base + str( status.id )
-
-		elif msg.startswith( "kittify" ):
-			return self.kittify()
-
-		elif msg.startswith( "kitlast" ):
-			url = self.kittify()
-			status = self.factory.api.PostUpdate( url )
-			return self.factory.base + str( status.id ) + " " + url
-
-		elif msg.startswith( "source" ):
+		if msg.startswith( "source" ):
 			return self.factory.config.get( "General", "source_url" )
 
 		elif msg.startswith( "help" ):
-			return "Commands: twitlast - tweets the last message; source - link to bot's source; kittify - kittenify the last message; kitlast - kittenify and post image to twitter; help - this message"
+			return "Logs the channel. View at http://lug.fltt.us"
 
 		elif msg.startswith( "die" ):
  			if user == self.factory.owner:
-				self.doQuit()
+				self.doQuit( user )
 			else:
-				self.me( channel, "fires first and watches %s writhing on the ground." % ( user, ) )
+				self.msg( channel, "%s: Only owner can do that." % ( user, ) )
 
 		elif msg.startswith( "join" ):
 			if user == self.factory.owner:
@@ -105,7 +83,7 @@ class twistedBot( irc.IRCClient ):
 				for chan in channels:
 					self.join( chan )
 			else:
-				self.me( channel, "kicks %s in the shin" % ( user, ) )
+				self.msg( channel, "%s: Only owner can do that." % ( user, ) )
 		
 		elif msg.startswith( "blacklist" ):
 			if user == self.factory.owner:
@@ -115,7 +93,7 @@ class twistedBot( irc.IRCClient ):
 
 				self.msg( channel, "Added %s to blacklist" % ( ", ".join( nicks ), ) )
 			else:
-				self.me( channel, "kicks %s in the shin" % ( user, ) )
+				self.msg( channel, "%s: Only owner can do that." % ( user, ) )
 
 		elif msg.startswith( "whitelist" ):
 			if user == self.factory.owner:
@@ -125,14 +103,14 @@ class twistedBot( irc.IRCClient ):
 
 				self.msg( channel, "Removed %s from blacklist" % ( ", ".join( nicks ), ) )
 			else:
-				self.me( channel, "kicks %s in the shin" % ( user, ) )
+				self.msg( channel, "%s: Only owner can do that." % ( user, ) )
 		
 		else:
 			return ""
 
-	def doQuit( self ):
+	def doQuit( self, user ):
 		self.factory.isQuitting = True
-		self.quit( "Yes master" )
+		self.quit( "Disconnected by %s" % ( user, ) )
 		self.saveBlacklist()
 
 	def saveBlacklist( self ):
@@ -145,60 +123,6 @@ class twistedBot( irc.IRCClient ):
 		self.blacklist = json.load( blacklistFile )
 		blacklistFile.close()
 
-	def kittify( self ):
-		if not hasattr( self, 'lastMsg' ) or self.lastMsg == "":
-			return ""
-
-		print self.lastMsg
-
-		kitten = "kitten%d.jpg" % random.choice( range( 1, 10 ) )
-		im = Image.open( "kittens/" + kitten )
-		box = im.getbbox()
-		width = box[2]
-		height = box[3]
-		fsize = 70
-		font = ImageFont.truetype( "ArialBlack.ttf", fsize )
-
-		while font.getsize( self.lastMsg )[0] > ( ( width * 2 ) - 100 ):
-			fsize -= 2
-			font = ImageFont.truetype( "ArialBlack.ttf", fsize )
-
-		lines = textwrap.wrap( self.lastMsg, int( width / fsize * 1.65 ) )
-
-		draw = ImageDraw.Draw( im )
-		draw.text( ( 10, 10 ), lines[0], font=font, fill="white" )
-
-		if len( lines ) > 1:
-			draw.text( ( 10, height - 10 - fsize ), lines[-1], font=font )
-
-		im.save( "tmp.jpg" )
-
-		response = cStringIO.StringIO()
-
-		c = pycurl.Curl()
-
-		values = [
-			( "key", self.factory.imgur_token ),
-			( "image", ( c.FORM_FILE, "tmp.jpg" ) )
-		]
-		
-		c.setopt( c.URL, "http://api.imgur.com/2/upload.json" )
-		c.setopt( c.HTTPPOST, values )
-		c.setopt( c.WRITEFUNCTION, response.write )
-		c.perform()
-		c.close()
-		ret = json.loads( response.getvalue() )
-		return str( ret[ 'upload' ][ 'links' ][ 'original' ] )
-
-		
-	def getsentence(self, msg):
-		brain.add_to_brain(msg, self.factory.chain_length, write_to_file=True)
-		sentence = brain.generate_sentence(msg, self.factory.chain_length, self.factory.max_words)
-		if sentence:
-			return sentence
-		else:
-			return msg
-
 
 class twistedBotFactory( protocol.ClientFactory ):
 	protocol = twistedBot
@@ -208,22 +132,8 @@ class twistedBotFactory( protocol.ClientFactory ):
 		self.channel = config.get( "IRC", "channel" )
 		self.nickname = config.get( "IRC", "nickname" )
 
-		self.chain_length = config.getint( "Markov", "chain_length" )
-		self.chattiness = config.getfloat( "Markov", "chattiness" )
-		self.max_words = config.getint( "Markov", "max_words" )
-
 		self.source_url = config.get( "General", "source_url" )
 		self.owner = config.get( "General", "owner" )
-
-		self.base = config.get( "Twitter", "base_url" )
-		self.api = twitter.Api( 
-								config.get( "Twitter", "consumer_key" ), 
-								config.get( "Twitter", "consumer_secret" ), 
-								config.get( "Twitter", "access_token_key" ), 
-								config.get( "Twitter", "access_token_secret" )
-							  )
-
-		self.imgur_token = config.get( "Kittify", "imgur_token" );
 
 		self.config = config
 	
@@ -245,16 +155,6 @@ if __name__ == "__main__":
 
 	server = config.get( "IRC", "server" )
 	port = config.getint( "IRC", "port" )
-	chain_length = config.getint( "Markov", "chain_length" )
 		
-	if os.path.exists( 'training_text.txt' ):
-		f = open( 'training_text.txt', 'r' )
-
-		for line in f:
-			brain.add_to_brain( line.upper(), chain_length )
-
-		print "brain loaded"
-		f.close()
-
 	reactor.connectTCP( server, port, twistedBotFactory( config ) )
 	reactor.run()
