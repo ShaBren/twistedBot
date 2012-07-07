@@ -77,6 +77,14 @@ class twistedBot( irc.IRCClient ):
 			else:
 				self.msg( channel, "%s: Only owner can do that." % ( user, ) )
 
+		elif msg.startswith( "part" ):
+			if user == self.factory.owner:
+				channels = msg.split( " " )[1:]
+				for chan in channels:
+					self.leave( chan )
+			else:
+				self.msg( channel, "%s: Only owner can do that." % ( user, ) )
+	
 		elif msg.startswith( "join" ):
 			if user == self.factory.owner:
 				channels = msg.split( " " )[1:]
